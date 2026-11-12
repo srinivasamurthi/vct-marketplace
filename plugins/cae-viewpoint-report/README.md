@@ -76,8 +76,8 @@ Jobs run in the background (default limit 60 min); job files are kept in `<out_d
 ## Troubleshooting
 | Symptom | Cause / fix |
 |---|---|
-| `ModuleNotFoundError: _CaeEngineWrap_x64_Release` / `_CaeInfoWrap_x64_Release` | Python variables from the server's environment leaked into VMoveCAE. Fixed in 0.2.1 (clean child environment); `vp_env_check` lists any `leaking_python_vars`. |
-| Job stays `running` with no progress; console ends at `OGRE Initialising` | VCollab Pro stuck at start-up. End leftover `VCollabPro.exe` processes, unlock the Windows session, re-run. |
+| `ModuleNotFoundError: _CaeEngineWrap_x64_Release` / `_CaeInfoWrap_x64_Release` | VMoveCAE / VCollab Pro started without `VCOLLAB_DIR` (an empty plugin setting hid the system value). Fixed in 0.2.2: children always get the detected install folder; `vp_env_check` shows `vcollab_dir_for_children`. |
+| Job stays `running` with no progress; console ends at `OGRE Initialising` | VCollab Pro cannot start (before 0.2.2 usually the missing `VCOLLAB_DIR`). Otherwise end leftover `VCollabPro.exe` processes, unlock the Windows session, re-run. |
 | Translation fails for a format | Check the console tail: unsupported version, missing VMoveCAE licence for that solver, or a separate results file (Fluent `.dat`). |
 
 ## Privacy and license

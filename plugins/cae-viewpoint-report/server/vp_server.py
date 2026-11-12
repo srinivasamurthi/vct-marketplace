@@ -75,8 +75,25 @@ def clean_env(extra=None):
             continue
         keep.append(p)
     env["PATH"] = os.pathsep.join(keep)
+    # VCollab executables (VMoveCAEBatch, CaeInfo, VCollabPro) need VCOLLAB_DIR at runtime and fail
+    # with ModuleNotFoundError (_CaeEngineWrap_x64_Release) without it. The plugin setting is passed
+    # as VCOLLAB_DIR="" when left empty, which would hide the installer's system-wide value.
+    root = vcollab_root()
+    if root:
+        env["VCOLLAB_DIR"] = root
+    elif not env.get("VCOLLAB_DIR"):
+        env.pop("VCOLLAB_DIR", None)
     env.update(extra or {})
     return env
+
+
+def vcollab_root():
+    """Install root, e.g. C:\\Program Files\\VCollab\\26.1 (VCOLLAB_DIR if valid, else from VCollabPro.exe)."""
+    d = os.environ.get("VCOLLAB_DIR", "").strip()
+    if d and os.path.isdir(d):
+        return d
+    pro = find_vcollabpro()
+    return os.path.dirname(os.path.dirname(pro)) if pro else None
 
 
 def find_vmove_tool(exe_name):
@@ -159,12 +176,18 @@ def start_exe_job(kind, argv, jobs_root, expected, timeout_s=3600):
     jid = "%s-%s" % (kind, uuid.uuid4().hex[:8])
     jdir = norm(os.path.join(jobs_root, jid))
     os.makedirs(jdir, exist_ok=True)
+    for v in expected.values():  # never report a stale file from an earlier run as success
+        if os.path.isfile(v):
+            try:
+                os.replace(v, v + ".previous")
+            except OSError:
+                pass
     with open(os.path.join(jdir, "command.json"), "w", encoding="utf-8") as f:
         json.dump({"argv": argv, "expected": expected}, f, indent=1)
     out = open(os.path.join(jdir, "console.log"), "w", encoding="utf-8", errors="replace")
     flags = 0x08000000 if os.name == "nt" else 0
-    proc = subprocess.Popen(argv, cwd=jdir, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                            env=clean_env(), creationflags=flags)
+    proc = subprocess.Popen(argv, cwd=os.path.dirname(argv[0]) or jdir, stdout=out, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, env=clean_env(), creationflags=flags)
     with LOCK:
         JOBS[jid] = {"id": jid, "kind": kind, "proc": proc, "dir": jdir, "start": time.time(),
                      "timeout": timeout_s, "job": {"argv": argv}, "log": out, "expected": expected}
@@ -213,7 +236,8 @@ def job_state(jid, wait_s=0):
         outs = {k: v for k, v in j["expected"].items() if os.path.isfile(v) and os.path.getsize(v) > 0}
         st["returncode"] = j["proc"].returncode
         st["console_tail"] = tail(os.path.join(j["dir"], "console.log"), 25)
-        st["state"] = "done" if len(outs) == len(j["expected"]) else "failed"
+        outs = {k: v for k, v in outs.items() if os.path.getmtime(v) >= j["start"] - 1}
+        st["state"] = "done" if (len(outs) == len(j["expected"]) and j["proc"].returncode == 0) else "failed"
         st["result"] = {"outputs": {k: {"path": v, "size_kb": round(os.path.getsize(v) / 1024.0, 1)} for k, v in outs.items()},
                         "missing": [v for k, v in j["expected"].items() if k not in outs]}
         if j["kind"] == "caeinfo" and "xml" in outs:
@@ -242,6 +266,7 @@ def t_env_check(a):
     exe = find_vcollabpro()
     return {"vcollabpro_exe": exe, "found": bool(exe),
             "vmovecaebatch_exe": find_vmove_tool("VMoveCAEBatch.exe"), "caeinfo_exe": find_vmove_tool("CaeInfo.exe"),
+            "vcollab_dir_for_children": vcollab_root(), "vcollab_dir_in_server_env": os.environ.get("VCOLLAB_DIR"),
             "server_python": sys.version.split()[0], "server_python_exe": sys.executable,
             "leaking_python_vars": sorted(k for k in os.environ if k.upper() in PY_ENV_VARS or k.upper().startswith("UV_")),
             "platform": sys.platform, "jobs_this_session": len(JOBS),
@@ -415,7 +440,7 @@ def handle(msg):
     if method == "initialize":
         pv = (msg.get("params") or {}).get("protocolVersion", PROTOCOL)
         return {"protocolVersion": pv, "capabilities": {"tools": {}},
-                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.2.1"}}
+                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.2.2"}}
     if method == "ping":
         return {}
     if method == "tools/list":
