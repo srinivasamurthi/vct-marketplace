@@ -9,7 +9,7 @@ a viewpoint report, a CAX with rich viewpoints and a WCAX.
 | Plugin | Version | What it does |
 |---|---|---|
 | [`vcollab`](plugins/vcollab-plugin) | 0.2.0 | Inspect, convert, merge, and render CAE and CAD files with your local VCollab 26.1+ install on Windows: native results to CAX, CAX metadata, result images, and VCollab Pro XML batch jobs. Adds a VCollab workflow skill and a CAE result-review skill. |
-| [`cae-viewpoint-report`](plugins/cae-viewpoint-report) | 0.2.0 | Senior CAE review of a `.cax` or native solver file (converted automatically with VMoveCAEBatch) delivered as three files: viewpoint Markdown report, CAX with rich PPT-style viewpoints (text, tables, charts, verified probes) and WCAX with the same viewpoints, built with your local VCollab Pro 26.1+. |
+| [`cae-viewpoint-report`](plugins/cae-viewpoint-report) | 0.2.1 | Senior CAE review of a `.cax` or native solver file (converted automatically with VMoveCAEBatch) delivered as three files: viewpoint Markdown report, CAX with rich PPT-style viewpoints (text, tables, charts, verified probes) and WCAX with the same viewpoints, built with your local VCollab Pro 26.1+. |
 
 See each plugin's README ([vcollab](plugins/vcollab-plugin/README.md),
 [cae-viewpoint-report](plugins/cae-viewpoint-report/README.md)) for requirements, settings, tools and

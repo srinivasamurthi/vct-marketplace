@@ -52,6 +52,33 @@ def find_vcollabpro():
     return None
 
 
+PY_ENV_VARS = ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONEXECUTABLE", "PYTHONUSERBASE",
+               "PYTHONNOUSERSITE", "PYTHONSAFEPATH", "PYTHONPLATLIBDIR", "VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT",
+               "__PYVENV_LAUNCHER__", "CONDA_PREFIX", "CONDA_DEFAULT_ENV", "CONDA_PYTHON_EXE")
+
+
+def clean_env(extra=None):
+    """Environment for VCollab / VMoveCAE child processes.
+
+    Those programs embed their own Python 3.12. When this server is started by uv (or any venv),
+    variables such as PYTHONHOME / PYTHONPATH / VIRTUAL_ENV and the venv's folders on PATH leak
+    into the child and break its imports (ModuleNotFoundError: _CaeEngineWrap_x64_Release)."""
+    env = {k: v for k, v in os.environ.items()
+           if k.upper() not in PY_ENV_VARS and not k.upper().startswith("UV_")}
+    venv = os.environ.get("VIRTUAL_ENV", "")
+    here_py = os.path.dirname(sys.executable)
+    keep = []
+    for p in env.get("PATH", "").split(os.pathsep):
+        pl = p.lower()
+        own_venv_py = pl.rstrip("\\/") == here_py.lower().rstrip("\\/") and (venv or "uv" in here_py.lower())
+        if not p or (venv and pl.startswith(venv.lower())) or own_venv_py or "\\uv\\" in pl or "/uv/" in pl:
+            continue
+        keep.append(p)
+    env["PATH"] = os.pathsep.join(keep)
+    env.update(extra or {})
+    return env
+
+
 def find_vmove_tool(exe_name):
     """VMoveCAE64 tools (VMoveCAEBatch.exe, CaeInfo.exe, caxinfo.exe) next to the VCollab Pro install."""
     cand = []
@@ -116,7 +143,7 @@ def start_job(kind, task, job, cax, timeout_s=3600):
     with open(script, "w", encoding="utf-8") as f:
         f.write(compose(task, job))
     out = open(os.path.join(jdir, "vcollab_console.log"), "w", encoding="utf-8", errors="replace")
-    env = dict(os.environ, VCOLLAB_ENABLE_VCOLLABPRO_SCRIPT="1")
+    env = clean_env({"VCOLLAB_ENABLE_VCOLLABPRO_SCRIPT": "1"})
     flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
     proc = subprocess.Popen([exe, "-b", script, cax], cwd=jdir, stdout=out, stderr=subprocess.STDOUT,
                             stdin=subprocess.DEVNULL, env=env, creationflags=flags)
@@ -137,7 +164,7 @@ def start_exe_job(kind, argv, jobs_root, expected, timeout_s=3600):
     out = open(os.path.join(jdir, "console.log"), "w", encoding="utf-8", errors="replace")
     flags = 0x08000000 if os.name == "nt" else 0
     proc = subprocess.Popen(argv, cwd=jdir, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                            creationflags=flags)
+                            env=clean_env(), creationflags=flags)
     with LOCK:
         JOBS[jid] = {"id": jid, "kind": kind, "proc": proc, "dir": jdir, "start": time.time(),
                      "timeout": timeout_s, "job": {"argv": argv}, "log": out, "expected": expected}
@@ -171,6 +198,12 @@ def job_state(jid, wait_s=0):
           "progress": tail(os.path.join(j["dir"], "progress.log"))}
     if j["proc"].poll() is None:
         st["state"] = "running"
+        if not st["progress"] and not j.get("expected") and elapsed > 90:
+            st["hint"] = ("No progress after %d s: VCollab Pro has not started the job script. It is probably stuck "
+                          "at start-up (see vcollab_console.log - e.g. stops at 'OGRE Initialising'). End leftover "
+                          "VCollabPro.exe processes in Task Manager, make sure the Windows session is unlocked, then "
+                          "re-run the step." % elapsed)
+            st["console_tail"] = tail(os.path.join(j["dir"], "vcollab_console.log"), 5)
         return st
     try:
         j["log"].close()
@@ -209,7 +242,8 @@ def t_env_check(a):
     exe = find_vcollabpro()
     return {"vcollabpro_exe": exe, "found": bool(exe),
             "vmovecaebatch_exe": find_vmove_tool("VMoveCAEBatch.exe"), "caeinfo_exe": find_vmove_tool("CaeInfo.exe"),
-            "server_python": sys.version.split()[0],
+            "server_python": sys.version.split()[0], "server_python_exe": sys.executable,
+            "leaking_python_vars": sorted(k for k in os.environ if k.upper() in PY_ENV_VARS or k.upper().startswith("UV_")),
             "platform": sys.platform, "jobs_this_session": len(JOBS),
             "note": "Jobs run VCollab Pro's own embedded Python (needs yaml, matplotlib, PIL - bundled with VCollab Pro 2026)."}
 
@@ -381,7 +415,7 @@ def handle(msg):
     if method == "initialize":
         pv = (msg.get("params") or {}).get("protocolVersion", PROTOCOL)
         return {"protocolVersion": pv, "capabilities": {"tools": {}},
-                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.2.0"}}
+                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.2.1"}}
     if method == "ping":
         return {}
     if method == "tools/list":

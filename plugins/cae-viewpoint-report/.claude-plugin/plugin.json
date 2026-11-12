@@ -1,7 +1,7 @@
 {
   "name": "cae-viewpoint-report",
   "displayName": "CAE Viewpoint Report",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Senior CAE review of a VCollab .cax or a native solver file (op2, odb, rst, d3plot, ...) delivered as three files: a viewpoint Markdown report, a CAX with rich PPT-style viewpoints (text, tables, charts, probes) and a WCAX with the same viewpoints. Native files are converted automatically with VMoveCAEBatch; everything runs with your local VCollab 26.1+ on Windows.",
   "author": {
     "name": "VCollab",

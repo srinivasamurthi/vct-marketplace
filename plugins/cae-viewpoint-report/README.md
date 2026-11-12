@@ -73,6 +73,13 @@ Jobs run in the background (default limit 60 min); job files are kept in `<out_d
 - The CAX contains no material, energy or solver data; supply native files or allowables for a
   full verdict.
 
+## Troubleshooting
+| Symptom | Cause / fix |
+|---|---|
+| `ModuleNotFoundError: _CaeEngineWrap_x64_Release` / `_CaeInfoWrap_x64_Release` | Python variables from the server's environment leaked into VMoveCAE. Fixed in 0.2.1 (clean child environment); `vp_env_check` lists any `leaking_python_vars`. |
+| Job stays `running` with no progress; console ends at `OGRE Initialising` | VCollab Pro stuck at start-up. End leftover `VCollabPro.exe` processes, unlock the Windows session, re-run. |
+| Translation fails for a format | Check the console tail: unsupported version, missing VMoveCAE licence for that solver, or a separate results file (Fluent `.dat`). |
+
 ## Privacy and license
 
 See [PRIVACY.md](PRIVACY.md). MIT licensed; see [LICENSE](LICENSE). VCollab itself is commercial
