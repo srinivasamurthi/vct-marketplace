@@ -1,6 +1,8 @@
 # cae-viewpoint-report
 
-Senior CAE review of a VCollab `.cax` model, delivered as three files:
+Senior CAE review of a VCollab `.cax` model **or a native solver file** (Nastran `.op2`/`.bdf`, Abaqus
+`.odb`, ANSYS `.rst`/`.rth`, LS-DYNA `d3plot`, Fluent `.cas`+`.dat`, Marc `.t16`, ...), delivered as
+three files:
 
 | # | File | What it is |
 |---|---|---|
@@ -27,11 +29,12 @@ Claude Code (2.1.275 or later):
 | Command `/viewpoint-report <model.cax> [native files] [allowable]` | One-shot run |
 | MCP server `vcollab-viewpoints` (`server/vp_server.py`) | Starts VCollab Pro batch jobs in the background and reports progress |
 
-MCP tools: `vp_env_check`, `vp_extract_model`, `vp_verify_probes`, `vp_build`, `vp_job_status`,
+MCP tools: `vp_env_check`, `vp_cae_info`, `vp_translate`, `vp_extract_model`, `vp_verify_probes`, `vp_build`, `vp_job_status`,
 `vp_list_jobs`.
 
 ## Requirements
-- Windows with **VCollab Pro 2026** (tested with 26.1) — the jobs run in VCollab Pro's embedded
+- Windows with **VCollab Pro 2026** (tested with 26.1); for native input also **VMoveCAE** (same
+  install, `VMoveCAE64\VMoveCAEBatch.exe` and `CaeInfo.exe`) licensed for your solver formats — the jobs run in VCollab Pro's embedded
   Python, which already contains yaml, matplotlib, numpy and PIL.
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** on your `PATH` (same as the
   VCollab plugin). It starts the small MCP server, which uses only the Python standard library.
@@ -40,6 +43,11 @@ MCP tools: `vp_env_check`, `vp_extract_model`, `vp_verify_probes`, `vp_build`, `
   Set the **VCollab installation folder** setting (or env `VCOLLABPRO_EXE`) to override.
 
 ## How it works
+0. **Native input** is converted automatically: `vp_cae_info` runs VMoveCAE **CaeInfo** (parts,
+   results, instances, loads, constraints) and `vp_translate` runs **VMoveCAEBatch** with
+   `--element-results` for stress/strain, so the CAX keeps unaveraged element values. Tested on
+   `Samples\Native CAE Files\bracket.op2`: peak von Mises 53,991 psi at element 127, matching the
+   solver, instead of 51,986 psi node-averaged in a default CAX.
 1. `vp_extract_model` runs `VCollabPro.exe -b job.py model.cax` and writes
    `<model>_model_data.json` (parts, results, exact derived names, instances, min/max with IDs).
 2. Claude reviews the data (plus any native solver files) and writes the viewpoint MD.
@@ -51,6 +59,7 @@ Jobs run in the background (default limit 60 min); job files are kept in `<out_d
 
 ## Usage
 - `/viewpoint-report D:\models\bracket.cax`
+- `/viewpoint-report D:\models\bracket.op2` (converted to CAX automatically)
 - "Review Airbag.cax and give me the viewpoint report with CAX and WCAX"
 - "Build the CAX and WCAX from D:\out\airbag_viewpoints.md"
 

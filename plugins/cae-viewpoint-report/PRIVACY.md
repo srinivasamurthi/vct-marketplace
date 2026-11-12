@@ -11,6 +11,8 @@ options) and reads the files you name. It uses them only to run VCollab Pro on y
 
 ## Use and storage
 
+- Native solver files are converted locally by VMoveCAE (CaeInfo, VMoveCAEBatch); the CAX and the
+  CaeInfo XML are written to the output folder.
 - Models are processed locally by VCollab Pro in batch mode. Outputs (the viewpoint Markdown file,
   the CAX, the WCAX, HTML panels, chart images, screenshots and a contact sheet) are written to the
   output folder you choose, by default `<model folder>\<model>_viewpoints\`.

@@ -13,7 +13,7 @@
     {
       "name": "cae-viewpoint-report",
       "source": "./plugins/cae-viewpoint-report",
-      "description": "Review a VCollab .cax model and get three files: a viewpoint Markdown report written with the CAE-expert review method, a CAX with one rich PPT-style viewpoint per slide (title bar, text and tables, charts, verified probes) and a WCAX with the same viewpoints. Builds run in the background with your local VCollab Pro 26.1+ on Windows; nothing is uploaded by the plugin."
+      "description": "Review a VCollab .cax or a native solver file (op2, odb, rst, d3plot, ...; converted automatically with VMoveCAEBatch, keeping element stresses) and get three files: a viewpoint Markdown report written with the CAE-expert review method, a CAX with one rich PPT-style viewpoint per slide (title bar, text and tables, charts, verified probes) and a WCAX with the same viewpoints. Runs with your local VCollab 26.1+ on Windows; nothing is uploaded by the plugin."
     }
   ]
 }

@@ -6,7 +6,7 @@ Pure standard library (no pip installs). It launches VCollab Pro in batch mode
 (`VCollabPro.exe -b job.py model.cax`) as background jobs, so long builds are not
 cut off by client time-outs, and reports progress / results.
 
-Tools: vp_env_check, vp_extract_model, vp_verify_probes, vp_build, vp_job_status, vp_list_jobs
+Tools: vp_env_check, vp_cae_info, vp_translate, vp_extract_model, vp_verify_probes, vp_build, vp_job_status, vp_list_jobs
 Stdout is the MCP channel - never print to it.
 """
 import glob
@@ -50,6 +50,32 @@ def find_vcollabpro():
         if c and os.path.isfile(c):
             return c
     return None
+
+
+def find_vmove_tool(exe_name):
+    """VMoveCAE64 tools (VMoveCAEBatch.exe, CaeInfo.exe, caxinfo.exe) next to the VCollab Pro install."""
+    cand = []
+    if os.environ.get("VMOVECAE_DIR"):
+        cand.append(os.path.join(os.environ["VMOVECAE_DIR"], exe_name))
+    if os.environ.get("VCOLLAB_DIR"):
+        cand.append(os.path.join(os.environ["VCOLLAB_DIR"], "VMoveCAE64", exe_name))
+    pro = find_vcollabpro()
+    if pro:
+        cand.append(os.path.join(os.path.dirname(os.path.dirname(pro)), "VMoveCAE64", exe_name))
+    for root in (os.environ.get("ProgramFiles", r"C:\Program Files"), r"C:\Program Files"):
+        cand += sorted(glob.glob(os.path.join(root, "VCollab", "*", "VMoveCAE64", exe_name)), reverse=True)
+    for c in cand:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def model_stem(path):
+    """Stem for a native model; 'd3plot'-style names use the parent folder name."""
+    s = stem_of(path)
+    if s.lower() in ("d3plot", "d3thdt", "binout") or not s:
+        s = os.path.basename(os.path.dirname(norm(path))) or s
+    return s
 
 
 def norm(p):
@@ -101,6 +127,24 @@ def start_job(kind, task, job, cax, timeout_s=3600):
     return jid
 
 
+def start_exe_job(kind, argv, jobs_root, expected, timeout_s=3600):
+    """Run a VMoveCAE command-line tool in the background; success = expected output file written."""
+    jid = "%s-%s" % (kind, uuid.uuid4().hex[:8])
+    jdir = norm(os.path.join(jobs_root, jid))
+    os.makedirs(jdir, exist_ok=True)
+    with open(os.path.join(jdir, "command.json"), "w", encoding="utf-8") as f:
+        json.dump({"argv": argv, "expected": expected}, f, indent=1)
+    out = open(os.path.join(jdir, "console.log"), "w", encoding="utf-8", errors="replace")
+    flags = 0x08000000 if os.name == "nt" else 0
+    proc = subprocess.Popen(argv, cwd=jdir, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                            creationflags=flags)
+    with LOCK:
+        JOBS[jid] = {"id": jid, "kind": kind, "proc": proc, "dir": jdir, "start": time.time(),
+                     "timeout": timeout_s, "job": {"argv": argv}, "log": out, "expected": expected}
+    err("started %s pid=%s" % (jid, proc.pid))
+    return jid
+
+
 def tail(path, n=15):
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -132,6 +176,22 @@ def job_state(jid, wait_s=0):
         j["log"].close()
     except Exception:
         pass
+    if j.get("expected"):  # VMoveCAE command-line job
+        outs = {k: v for k, v in j["expected"].items() if os.path.isfile(v) and os.path.getsize(v) > 0}
+        st["returncode"] = j["proc"].returncode
+        st["console_tail"] = tail(os.path.join(j["dir"], "console.log"), 25)
+        st["state"] = "done" if len(outs) == len(j["expected"]) else "failed"
+        st["result"] = {"outputs": {k: {"path": v, "size_kb": round(os.path.getsize(v) / 1024.0, 1)} for k, v in outs.items()},
+                        "missing": [v for k, v in j["expected"].items() if k not in outs]}
+        if j["kind"] == "caeinfo" and "xml" in outs:
+            with open(outs["xml"], encoding="utf-8", errors="replace") as f:
+                txt = f.read()
+            st["result"]["xml_preview"] = txt[:12000]
+            st["result"]["xml_truncated"] = len(txt) > 12000
+        if st["state"] == "failed":
+            st["hint"] = ("No output written. Check the console tail: unsupported format/version, missing licence for "
+                          "the solver format, or a results file that must be passed separately (e.g. Fluent .dat).")
+        return st
     if os.path.isfile(res_path):
         with open(res_path, encoding="utf-8") as f:
             res = json.load(f)
@@ -147,7 +207,9 @@ def job_state(jid, wait_s=0):
 # --------------------------------------------------------------------------- tools
 def t_env_check(a):
     exe = find_vcollabpro()
-    return {"vcollabpro_exe": exe, "found": bool(exe), "server_python": sys.version.split()[0],
+    return {"vcollabpro_exe": exe, "found": bool(exe),
+            "vmovecaebatch_exe": find_vmove_tool("VMoveCAEBatch.exe"), "caeinfo_exe": find_vmove_tool("CaeInfo.exe"),
+            "server_python": sys.version.split()[0],
             "platform": sys.platform, "jobs_this_session": len(JOBS),
             "note": "Jobs run VCollab Pro's own embedded Python (needs yaml, matplotlib, PIL - bundled with VCollab Pro 2026)."}
 
@@ -193,6 +255,58 @@ def t_build(a):
     return st
 
 
+def _native_out_dir(model, out_dir):
+    d = norm(out_dir) if out_dir else norm(os.path.join(os.path.dirname(norm(model)), model_stem(model) + "_viewpoints"))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def t_cae_info(a):
+    exe = find_vmove_tool("CaeInfo.exe")
+    if not exe:
+        raise RuntimeError("CaeInfo.exe not found (VMoveCAE64 folder). Set VCOLLAB_DIR or VMOVECAE_DIR.")
+    model = norm(a["model_file"])
+    if not os.path.exists(model):
+        raise FileNotFoundError(model)
+    out_dir = _native_out_dir(model, a.get("out_dir"))
+    xml = "%s/%s_caeinfo.xml" % (out_dir, model_stem(model))
+    argv = [exe, model] + ([norm(a["results_file"])] if a.get("results_file") else []) + ["--output=%s" % xml]
+    jid = start_exe_job("caeinfo", argv, os.path.join(out_dir, "_jobs"), {"xml": xml}, a.get("timeout_s", 900))
+    return job_state(jid, a.get("wait_seconds", 45))
+
+
+def t_translate(a):
+    exe = find_vmove_tool("VMoveCAEBatch.exe")
+    if not exe:
+        raise RuntimeError("VMoveCAEBatch.exe not found (VMoveCAE64 folder). Set VCOLLAB_DIR or VMOVECAE_DIR.")
+    model = norm(a["model_file"])
+    if not os.path.exists(model):
+        raise FileNotFoundError(model)
+    out_dir = _native_out_dir(model, a.get("out_dir"))
+    cax = norm(a["out_cax"]) if a.get("out_cax") else "%s/%s.cax" % (out_dir, model_stem(model))
+    if os.path.isfile(cax) and not a.get("overwrite", True):
+        return {"state": "done", "result": {"outputs": {"cax": {"path": cax}}}, "note": "existing CAX reused"}
+    opts = []
+    for key, flag in (("results", "--results"), ("element_results", "--element-results"),
+                      ("filter_results", "--filter-results"), ("sections", "--sections"),
+                      ("parts", "--parts"), ("filter_parts", "--filter-parts"), ("part_ids", "--part-ids"),
+                      ("instances", "--instances"), ("filter_instances", "--filter-instances"),
+                      ("part_grouping", "--part-grouping"), ("model_file_format", "--model-file-format")):
+        if a.get(key):
+            opts.append("%s=%s" % (flag, a[key]))
+    for key, flag in (("mid_nodes", "--enable-mid-nodes"), ("odb_fast_load", "--enable-odb-fast-load"),
+                      ("odb_zero_frames", "--enable-odb-load-zero-frames"),
+                      ("no_averaging_across_materials", "--no-averaging-across-materials")):
+        if a.get(key):
+            opts.append(flag)
+    opts += [str(x) for x in (a.get("extra_args") or [])]
+    argv = [exe] + opts + [model] + ([norm(a["results_file"])] if a.get("results_file") else []) + [cax]
+    jid = start_exe_job("translate", argv, os.path.join(out_dir, "_jobs"), {"cax": cax}, a.get("timeout_s", 3600))
+    st = job_state(jid, a.get("wait_seconds", 45))
+    st["command"] = argv
+    return st
+
+
 def t_status(a):
     return job_state(a["job_id"], a.get("wait_seconds", 45))
 
@@ -208,6 +322,25 @@ S = {"type": "string"}
 TOOLS = [
     ("vp_env_check", "Check that VCollab Pro (VCollabPro.exe) is found and report the server environment.",
      {"type": "object", "properties": {}}, t_env_check),
+    ("vp_cae_info",
+     "Run VMoveCAE CaeInfo on a NATIVE solver file (.op2, .bdf, .odb, .rst, .rth, d3plot, .cas+.dat, .t16, ...) "
+     "and return its metadata XML (parts, results, instances). Use before vp_translate to choose results/parts.",
+     {"type": "object", "required": ["model_file"], "properties": {
+         "model_file": S, "results_file": S, "out_dir": S, "wait_seconds": {"type": "number"}}}, t_cae_info),
+    ("vp_translate",
+     "Convert a NATIVE solver file to CAX with VMoveCAEBatch (background job). Default output "
+     "<model folder>/<model>_viewpoints/<model>.cax. Options map to VMoveCAEBatch flags: results, element_results "
+     "(keep unaveraged element values, e.g. 'Stress'), filter_results, sections ('Top, Bottom, Maximum'), parts, "
+     "filter_parts, part_ids, instances, filter_instances, part_grouping, model_file_format, mid_nodes, odb_fast_load, "
+     "odb_zero_frames, no_averaging_across_materials, extra_args. results_file for two-file formats (Fluent .cas+.dat).",
+     {"type": "object", "required": ["model_file"], "properties": {
+         "model_file": S, "results_file": S, "out_cax": S, "out_dir": S, "results": S, "element_results": S,
+         "filter_results": S, "sections": S, "parts": S, "filter_parts": S, "part_ids": S, "instances": S,
+         "filter_instances": S, "part_grouping": S, "model_file_format": S,
+         "mid_nodes": {"type": "boolean"}, "odb_fast_load": {"type": "boolean"}, "odb_zero_frames": {"type": "boolean"},
+         "no_averaging_across_materials": {"type": "boolean"}, "extra_args": {"type": "array", "items": S},
+         "overwrite": {"type": "boolean"}, "wait_seconds": {"type": "number"}, "timeout_s": {"type": "number"}}},
+     t_translate),
     ("vp_extract_model",
      "Start a VCollab Pro job that catalogues a .cax: model name, parts (node counts, bounds), every result with exact "
      "derived-type names, instances + Time/Frequency attributes, min/max (+IDs) per instance, peak instance and the top "
@@ -248,7 +381,7 @@ def handle(msg):
     if method == "initialize":
         pv = (msg.get("params") or {}).get("protocolVersion", PROTOCOL)
         return {"protocolVersion": pv, "capabilities": {"tools": {}},
-                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.1.0"}}
+                "serverInfo": {"name": "vcollab-viewpoints", "version": "0.2.0"}}
     if method == "ping":
         return {}
     if method == "tools/list":

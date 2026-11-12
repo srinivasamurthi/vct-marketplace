@@ -1,8 +1,8 @@
 {
   "name": "cae-viewpoint-report",
   "displayName": "CAE Viewpoint Report",
-  "version": "0.1.0",
-  "description": "Senior CAE review of a VCollab .cax model delivered as three files: a viewpoint Markdown report, a CAX with rich PPT-style viewpoints (text, tables, charts, probes) and a WCAX with the same viewpoints, built automatically with your local VCollab Pro 26.1+ on Windows.",
+  "version": "0.2.0",
+  "description": "Senior CAE review of a VCollab .cax or a native solver file (op2, odb, rst, d3plot, ...) delivered as three files: a viewpoint Markdown report, a CAX with rich PPT-style viewpoints (text, tables, charts, probes) and a WCAX with the same viewpoints. Native files are converted automatically with VMoveCAEBatch; everything runs with your local VCollab 26.1+ on Windows.",
   "author": {
     "name": "VCollab",
     "email": "srinivasamurthi@vcollab.com",
@@ -11,7 +11,22 @@
   "homepage": "https://github.com/vcollab/vct-marketplace/tree/main/plugins/cae-viewpoint-report#readme",
   "repository": "https://github.com/vcollab/vct-marketplace",
   "license": "MIT",
-  "keywords": ["vcollab", "cae", "cax", "wcax", "viewpoints", "report", "fea", "simulation", "engineering"],
+  "keywords": [
+    "cae",
+    "cax",
+    "d3plot",
+    "engineering",
+    "fea",
+    "odb",
+    "op2",
+    "report",
+    "rst",
+    "simulation",
+    "vcollab",
+    "viewpoints",
+    "vmovecae",
+    "wcax"
+  ],
   "userConfig": {
     "vcollab_dir": {
       "type": "directory",

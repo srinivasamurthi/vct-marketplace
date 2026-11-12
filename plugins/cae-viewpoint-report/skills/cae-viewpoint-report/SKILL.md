@@ -5,14 +5,17 @@ description: >
   (1) a viewpoint Markdown report (slides + model data + one VCollab Pro viewpoint per slide),
   (2) a CAX with rich PPT-style viewpoints (title bar, text/tables, charts, probes) and (3) a WCAX
   with the same viewpoints - built automatically with VCollab Pro through the vcollab-viewpoints
-  tools. Use when the user asks to "review this cax and create viewpoints", "viewpoint report",
-  "cax and wcax with viewpoints", "rich viewpoints", "build the viewpoints from the MD", "VCollab
-  Pro report", or gives a .cax (optionally native solver files) and wants a review with viewpoints.
+  tools. Accepts a .cax OR a native solver file (.op2, .bdf, .odb, .rst, .rth, d3plot, .cas+.dat,
+  .t16 ...), which is converted to CAX automatically with VMoveCAEBatch first. Use when the user
+  asks to "review this cax/op2/odb/rst and create viewpoints", "viewpoint report", "cax and wcax
+  with viewpoints", "rich viewpoints", "build the viewpoints from the MD", "VCollab Pro report",
+  or gives a CAE result file and wants a review with viewpoints.
 ---
 
 # CAE viewpoint report: MD + CAX + WCAX
 
-Deliverables (same folder, default `<cax folder>/<model>_viewpoints/`):
+Deliverables (same folder, default `<model folder>/<model>_viewpoints/`; for native input the
+converted `<model>.cax` is written there too and is the base of the viewpoint CAX):
 1. `<model>_viewpoints.md` — the review: front matter, Model data, build instructions, one
    `## Slide N` per slide with slide content and a `viewpoint:` yaml block.
 2. `<model>_viewpoints.cax` — source model + viewpath with one rich viewpoint per slide.
@@ -22,7 +25,9 @@ Plus `<model>_viewpoints_assets/contact_sheet.png` for checking.
 ## Tools (MCP server `vcollab-viewpoints`)
 | Tool | Purpose |
 |---|---|
-| `vp_env_check` | VCollabPro.exe found? Run first if anything fails |
+| `vp_env_check` | VCollabPro.exe / VMoveCAEBatch.exe / CaeInfo.exe found? Run first if anything fails |
+| `vp_cae_info` | Native file metadata (CaeInfo XML): parts, results, instances, loads, constraints, counts |
+| `vp_translate` | Native file → CAX with VMoveCAEBatch (background job) |
 | `vp_extract_model` | Catalogue + result sweep → `<model>_model_data.json` (background job) |
 | `vp_verify_probes` | Probe candidate node/element IDs and compare with expected values |
 | `vp_build` | MD → CAX + WCAX (+ contact sheet). Background job |
@@ -33,6 +38,19 @@ Jobs run VCollab Pro in batch mode in the background, so long builds are fine: k
 
 ## Workflow
 
+0. **Native input → CAX (automatic)** — if the user gives a native solver file instead of a `.cax`
+   (or alongside one), convert it first; do not ask the user to do it:
+   - `vp_cae_info(model_file[, results_file])` → read the XML: result names, instances, parts,
+     load cases, constraints, element/node/material/property counts (use these in the review).
+   - `vp_translate(model_file[, results_file], element_results=...)` → poll `vp_job_status` to `done`.
+     Always pass `element_results` with the stress/strain tensor results listed by CaeInfo (e.g.
+     `"Stress"`, `"Stress, Strain"`): the CAX then holds unaveraged element values
+     (result names become `Element Stress (Top Section)` etc.), so peaks match the solver
+     (bracket test: 53,991 psi at element 127 vs 51,986 nodal-averaged). Add `sections` for shells
+     if needed, `results` / `parts` / `instances` filters for very large models, `results_file`
+     for two-file formats (Fluent `.cas` + `.dat`), `odb_fast_load` for big Abaqus ODBs.
+   - If translation fails, show the console tail (format/version/licence) and stop.
+   - Continue with the produced CAX as `cax_path`; keep the native file for the review.
 1. **Extract** — `vp_extract_model(cax_path)`, poll to `done`, then Read the JSON it wrote.
    It gives exact part names, result names, derived-type names, instances with Time/Frequency,
    per-instance min/max with IDs, peak instance and the top parts at the peak. Also read any native
