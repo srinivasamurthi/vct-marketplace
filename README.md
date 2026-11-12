@@ -1,16 +1,19 @@
 # VCollab Claude Plugin Marketplace
 
-A Claude Code plugin marketplace for the VCollab team. It currently holds one plugin, **VCollab**,
-which connects Claude to a local VCollab installation for working with CAE and CAD simulation files.
+A Claude Code plugin marketplace for the VCollab team. It holds two plugins: **VCollab**, which connects Claude to a local VCollab installation for working
+with CAE and CAD simulation files, and **CAE Viewpoint Report**, which reviews a CAX model and builds
+a viewpoint report, a CAX with rich viewpoints and a WCAX.
 
 ## Plugins
 
 | Plugin | Version | What it does |
 |---|---|---|
 | [`vcollab`](plugins/vcollab-plugin) | 0.2.0 | Inspect, convert, merge, and render CAE and CAD files with your local VCollab 26.1+ install on Windows: native results to CAX, CAX metadata, result images, and VCollab Pro XML batch jobs. Adds a VCollab workflow skill and a CAE result-review skill. |
+| [`cae-viewpoint-report`](plugins/cae-viewpoint-report) | 0.1.0 | Senior CAE review of a `.cax` delivered as three files: viewpoint Markdown report, CAX with rich PPT-style viewpoints (text, tables, charts, verified probes) and WCAX with the same viewpoints, built with your local VCollab Pro 26.1+. |
 
-See the [plugin README](plugins/vcollab-plugin/README.md) for requirements, settings, the full tool
-list, and troubleshooting.
+See each plugin's README ([vcollab](plugins/vcollab-plugin/README.md),
+[cae-viewpoint-report](plugins/cae-viewpoint-report/README.md)) for requirements, settings, tools and
+troubleshooting.
 
 ## Install
 
@@ -25,6 +28,7 @@ Or add the marketplace first, then install from it:
 ```
 /plugin marketplace add vcollab/vct-marketplace
 /plugin install vcollab@vct-marketplace
+/plugin install cae-viewpoint-report@vct-marketplace
 ```
 
 To pick up new versions later, run `/plugin marketplace update vct-marketplace`.
@@ -41,6 +45,12 @@ plugins/
     .mcp.json             Starts the local MCP server with uv
     src/vcollab_mcp/      MCP server and tools (Python)
     skills/               vcollab-workflows and cae-expert skills
+  cae-viewpoint-report/
+    .claude-plugin/       plugin.json
+    .mcp.json             Starts the stdlib MCP server (vp_server.py) with uv
+    server/               MCP server + VCollab Pro batch job scripts
+    skills/               cae-viewpoint-report skill (review method, MD format, examples)
+    commands/             /viewpoint-report
 ```
 
 ## Adding or updating a plugin
@@ -54,6 +64,7 @@ plugins/
    ```
    claude plugin validate .
    claude plugin validate ./plugins/vcollab-plugin
+   claude plugin validate ./plugins/cae-viewpoint-report
    ```
 
 ## Support
@@ -63,5 +74,6 @@ srinivasamurthi@vcollab.com.
 
 ## License
 
-The VCollab plugin is MIT licensed; see [its LICENSE](plugins/vcollab-plugin/LICENSE). VCollab
+Both plugins are MIT licensed; see [vcollab](plugins/vcollab-plugin/LICENSE) and
+[cae-viewpoint-report](plugins/cae-viewpoint-report/LICENSE). VCollab
 itself is commercial software licensed separately.

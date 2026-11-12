@@ -1,0 +1,23 @@
+{
+  "name": "cae-viewpoint-report",
+  "displayName": "CAE Viewpoint Report",
+  "version": "0.1.0",
+  "description": "Senior CAE review of a VCollab .cax model delivered as three files: a viewpoint Markdown report, a CAX with rich PPT-style viewpoints (text, tables, charts, probes) and a WCAX with the same viewpoints, built automatically with your local VCollab Pro 26.1+ on Windows.",
+  "author": {
+    "name": "VCollab",
+    "email": "srinivasamurthi@vcollab.com",
+    "url": "https://www.vcollab.com"
+  },
+  "homepage": "https://github.com/vcollab/vct-marketplace/tree/main/plugins/cae-viewpoint-report#readme",
+  "repository": "https://github.com/vcollab/vct-marketplace",
+  "license": "MIT",
+  "keywords": ["vcollab", "cae", "cax", "wcax", "viewpoints", "report", "fea", "simulation", "engineering"],
+  "userConfig": {
+    "vcollab_dir": {
+      "type": "directory",
+      "title": "VCollab installation folder",
+      "description": "Leave empty to auto-detect the newest C:\\Program Files\\VCollab\\<version> folder.",
+      "default": ""
+    }
+  }
+}
